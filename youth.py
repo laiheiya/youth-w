@@ -1,0 +1,830 @@
+#!/usr/bin/env python3
+# _*_ coding:utf-8 _*_
+
+# 此脚本参考 https://github.com/Sunert/Scripts/blob/master/Task/youth.js
+
+import traceback
+import time
+import re
+import json
+import sys
+import os
+from util import send, requests_session
+from datetime import datetime, timezone, timedelta
+
+# YOUTH_HEADER 为对象, 其他参数为字符串
+# 选择微信提现30元，立即兑换，在请求包中找到withdraw2的请求，拷贝请求body类型 p=****** 的字符串，放入下面对应参数即可 YOUTH_WITHDRAWBODY
+# 分享一篇文章，找到 put.json 的请求，拷贝请求体，放入对应参数 YOUTH_SHAREBODY
+# 清除App后台，重新启动App，找到 start.json 的请求，拷贝请求体，放入对应参数 YOUTH_STARTBODY
+
+cookies1 = {
+  'YOUTH_HEADER': {"Accept-Encoding":"gzip, deflate, br","Cookie":"sensorsdata2019jssdkcross=%7B%22distinct_id%22%3A%2252215360%22%2C%22%24device_id%22%3A%221769232b5a4e84-068327999369bc8-754c1651-304500-1769232b5a5d3c%22%2C%22props%22%3A%7B%22%24latest_traffic_source_type%22%3A%22%E7%9B%B4%E6%8E%A5%E6%B5%81%E9%87%8F%22%2C%22%24latest_referrer%22%3A%22%22%2C%22%24latest_referrer_host%22%3A%22%22%2C%22%24latest_search_keyword%22%3A%22%E6%9C%AA%E5%8F%96%E5%88%B0%E5%80%BC_%E7%9B%B4%E6%8E%A5%E6%89%93%E5%BC%80%22%7D%2C%22first_id%22%3A%221769232b5a4e84-068327999369bc8-754c1651-304500-1769232b5a5d3c%22%7D; Hm_lvt_6c30047a5b80400b0fd3f410638b8f0c=1609591843,1609591994,1609592397,1609676848; Hm_lvt_268f0a31fc0d047e5253dd69ad3a4775=1609599705,1609629013,1609640874,1609676831","Connection":"keep-alive","Referer":"https://kd.youth.cn/html/taskCenter/index.html?uuid=8cd100533527de49b2e11fd89bb9e475&sign=7d18007dbbb7e82f202e5edfd11e73a1&channel_code=80000000&uid=52215360&channel=80000000&access=WIfI&app_version=1.8.2&device_platform=iphone&cookie_id=98e792781a0e29babc0716ffc943ae20&openudid=8cd100533527de49b2e11fd89bb9e475&device_type=1&device_brand=iphone&sm_device_id=202012161324046e9bd7d7652536565862383de4d39015012b8f5a09795109&device_id=48996882&version_code=182&os_version=14.1&cookie=MDAwMDAwMDAwMJCMpN-w09Wtg5-Bb36eh6CPqHualq2jmrCarWOwzX2xhYyCmK6oqmqXr6NthJl7mI-shMmXeqDau4StacS3o7GFonabr7nIZ4KfebKEY2Ft&device_model=iPhone_6_Plus&subv=1.5.1&&cookie=MDAwMDAwMDAwMJCMpN-w09Wtg5-Bb36eh6CPqHualq2jmrCarWOwzX2xhYyCmK6oqmqXr6NthJl7mI-shMmXeqDau4StacS3o7GFonabr7nIZ4KfebKEY2Ft&cookie_id=98e792781a0e29babc0716ffc943ae20","Accept":"*/*","Host":"kd.youth.cn","User-Agent":"Mozilla/5.0 (iPhone; CPU iPhone OS 14_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148","Accept-Language":"zh-cn","X-Requested-With":"XMLHttpRequest"},
+  'YOUTH_READBODY': 'p=9NwGV8Ov71o%3DgW5NEpb6rjb84bkaCQyOq-myT0C-Ktb_kF97hamPuz4ZZk3rmRrVU_m2Z51XN3szZYaCPxNG07BYjyjwYkBVGTfTGYPVecze9u-jGHCQmfvey4yZrPyKR-cA01PbV3h61GBiHFc-skGrpoDK0eliCfJPX7f9_IVT-MEKcW_xpZC5t4ATmPRl6Xy3fTsVsCGWFIQd-VHRYRvD9Evat2Og2XRJBKPSltw4Vm8fFn6GZtj5XOv84EWQlE_i35ZqUAtr1hsrqWcAnF2TC75240e4Kt6QzTL9R0vSFmK8DPQ_btFImb30ReE3X-3ygWxqyzzPriEf5QipCxvENz-uiBbsC57Ih9dE4CpKLrTfQgK8kC1foR-p7glFhvGWeznxuHRU65TXGErqDfTRJ9Mm9XqPU8whUz-4uBWTknzckOqdgd4YHLDnPBtzDYu2E-oJISbZgmu2ObYgSI59owgKfC12wHR49ggabz8U-8Z2zQf_7eU-E82Qr1avRfgnrAVH7dtrYARBZl_PkK8ggA3Y9OiFsfIdMSuIY4BFDCMKAiHS3sWC4LyZBUelrsXfyAjrEeyHU6nDyKFIDOBeo7gjxfYsyVyoiAy8QkezVVHw1qdZGyO7B6a_ECsR2Vdi8QTD_TY9X-16HQRkjIKkVBy4enW0t-0kugegb1Ga0E05oEIITLYtSSd3uexN8OUC4_gz30cREWo7b6QAn1waxOD-v22jjOX7E36GcjnuWaiNFN905fs4MByAiUyhtbxXhsxaaqysFf4Xz2m1nI0qHQAZhN6dHmEilovsPHvF86hSbAoaC_s2otAMvsm0_IaQwf3IazXTeqG8xJBXMsCwU1GbaXXHgg%3D%3D',
+  'YOUTH_REDBODY': 'p=9NwGV8Ov71o%3DgW5NEpb6rjazbBlBp4-3VBqIE6FTR2KhfyLVi7Pl1_m0wwPJgXu-Fmh7S-5HqV6o1vMtEls8mPJh514T6M7mT424qvh8QrkxvplMO-SYOVD8eel3ty7vwxe_wa7ZfSZfXdjTiw3cbhIZT-OnIao6ZrF_hSdmQipG4Rvvz3nXQ6gK5CyHYI1D1-baeHBTpn7ijSSnjFXoXsy6hvlEIYh1cUDSXHSFpWKi5ag__H_2RRhqtLD4ACquoF6OxVHlmZsrFe-edqUBwxlp0fEVHtAIL9riIzk7LjbLFkRk2sQO7z4HC38rgVs7otr_muFdDFkEpjmm11KdDoboqoXxNuGk1lS9zhFBXmtamM_aH6WCMRqYD5c3wJNmZeX658OkFQeA0YvgK818meDvGN77rtylULvY-Fhi1XESGE1_dJItriIhkZnbwJ281snZBlMXO5ShDsFY8nzqAZ1HwHFP-ktI2hjfxZ-aXg3Heqa6yw5x3OYAUXR1hMNmrv4Aa9c9ZO-ErMOmZRjbzPpaD4IYC-NhD4Va5fGrZrz1sxJcEmPZSJLd0gfEGHksdnWyqrs1xJZ0oFlFMdfxKP27LCuukLUjwXDF5AtrqCsq2AZk_CAbJDVPUOvygxRXcSzx8LFj4UeIHVQv9dfp-p4OqkhnKwOpqS-ed0TldY8k_lZl14bIxlMNtItlJfV2NmsZxigeDQ8LxGk5FotbAW_TmtxLJBUisSHm95ZTldrapU90BR27iH7POHWCpCx6M3AhKRgoD7xxq7cqZCS6oC5VH61Y0da_yx304AQQGRj6HIFjK0Ebz7pCM6nfkahn-oQV0qvuMVz9I4oh9kSZw8pTjj-znidPUg%3D%3D',
+  'YOUTH_READTIMEBODY': 'p=9NwGV8Ov71o%3DgW5NEpb6rjb84bkaCQyOq-myT0C-Ktb_kF97hamPuz4ZZk3rmRrVU_m2Z51XN3szZYaCPxNG07BYjyjwYkBVGTfTGYPVecze9u-jGHCQmfvey4yZrPyKR-cA01PbV3h61GBiHFc-skGrpoDK0eliCfJPX7f9_IVT-MEKcW_xpZC5t4ATmPRl6Xy3fTsVsCGWFIQd-VHRYRvD9Evat2Og2XRJBKPSltw4Vm8fFn6GZtj5XOv84EWQlE_i35ZqUAtr1hsrqWcAnF1fvTXWiwQLa4sl9j7VEJzqTcR--yxkzOaiuD3GY18qJhvl1tMxycCUAm8TvT1nZRzMncWZdUIs8emuylQ0D6wpOc51oFg9oKiWO5eSyX7XoDNC2WDRBxFbArRdQFiSIxS8EOzrwYq8Rw2tMKCYW9sK2FUkmJ_uPEAS2RbDNWBCHBF5_OkkV031k2Gzxppd7fuU7ZG9tu6FKm8fnlzwnsPcV0l8kID12WS2lPIhODyXw-6QLMwbtEKka5I9_xNx4IEtxtIBafaaSVQL0Mky5DwgwLWOoejmrV64s_4guhL37VoVIiYb5wiKakB5eDqcONaK2l9LcGcPtW15NX8LRp--WQ3GGvazjlBKaxWU4PFUhA7nfNasgkTCDEF-6V15Sip-TmfdFpmE_uSe54DCOS4y2e5UAiJXq29JiubbcGrdQnVerYJhe11AdwAPvcNXzv3RoNQban_4rUlZgDFwAfFMlKriCkq2xhUFFtnZeaeDccxKsdVSUAJy61f-m9HZjkkq5JzM-5ufuBc2Iakf7SM68F-vi3AIykjY-NNJL-S2GuO2Xn533Jfr97bDLn3Y32Y%3D',
+  'YOUTH_WITHDRAWBODY': 'p=9NwGV8Ov71o%3DgW5NEpb6rjb84bkaCQyOq-myT0C-Ktb_kF97hamPuz4ZZk3rmRrVU_m2Z51XN3szZYaCPxNG07BYjyjwYkBVGTfTGYPVecze9u-jGHCQmfvey4yZrPyKR-cA01PbV3h61GBiHFc-skGrpoDK0eliCfJPX7f9_IVT-MEKcW_xpZC5t4ATmPRl6Xy3fTsVsCGWFIQd-VHRYRvD9Evat2Og2XRJBKPSltw4Vm8fFn6GZtj5XOv84EWQlE_i35ZqUAtr1hsrqWcAnF1fvTXWiwQLa4sl9j7VEJzqTcR--yxkzObtxvVZwFPb3QB6dgfR5x92JiiIrPvUj8BMsGJDAsHvvhYhU3VpZEyH-J4Ph65onLK-yqS5JgRs9VLqOBmxslS_jBePMXknDZtAN3Vw_8LV9Wb65l1LiapOtqIX0T09nCrD30bgcL7vTMy5FzHEouq8aTSOVuYnfkcoD3of02yoSeRdogjyDO6wNBREn2PsmgtluzEuiiG5qUV-F8drkRfdtNwvb7fE0afYwE0BI4ddgKthBKaqex2h2faVSK3NANBMbaQoWn-U-DwPGIQHDs73qxIRUCO6p9s0iK_UOf91IvAxaPUqYxRZ0gz6hm67wH8St0fG39Nu0VOeYF3qqNgRfV4TOMcV8_PjybgrJ7b4vlpLkUO081wEW5ekbjCAs8_Pr2eZA23rX8WatAOOEUxKI0Sr6__plev4WI3QaSoOpPLCGOxTMrYQ79nIQPY6shLv4XuPfC7gZg6rdXQyWA8HEw9FkrbslTZZ_vzBSDbtFS4yZBZP41ZoMNhD67lCEjcaIjAiabhmxZP0bQMM2YhkSU3sMnK2LN4%3D',
+  'YOUTH_SHAREBODY': 'access=WIFI&app_version=1.8.2&article_id=36276576&channel=80000000&channel_code=80000000&cid=80000000&client_version=1.8.2&device_brand=iphone&device_id=49756471&device_model=iPhone&device_platform=iphone&device_type=iphone&from=0&is_hot=0&isnew=1&mobile_type=2&net_type=1&openudid=71939dc76879698f93f2ccd587aa46fe&os_version=14.1&phone_code=71939dc76879698f93f2ccd587aa46fe&phone_network=WIFI&platform=3&request_time=1613306459&resolution=750x1624&sign=01f5884b8eaf4f5b8c9d340683eaf3ee&sm_device_id=202101152102004426b62b151c979439e02a2ae1f6de490143f6d402d2625c&stype=WEIXIN&szlm_ddid=D2bTEGxCI9AhV0OsL5Ra5rrxdydGVRkzDRECXmh7wlq7AXd5&time=1613306459&uid=52215360&uuid=71939dc76879698f93f2ccd587aa46fe',
+  'YOUTH_STARTBODY':'access=WIFI&app_version=1.8.2&channel=80000000&channel_code=80000000&cid=80000000&client_version=1.8.2&device_brand=iphone&device_id=49756471&device_model=iPhone&device_platform=iphone&device_type=iphone&isnew=1&mobile_type=2&net_type=1&openudid=71939dc76879698f93f2ccd587aa46fe&os_version=14.1&phone_code=71939dc76879698f93f2ccd587aa46fe&phone_network=WIFI&platform=3&request_time=1613961538&resolution=750x1624&sm_device_id=202101152102004426b62b151c979439e02a2ae1f6de490143f6d402d2625c&szlm_ddid=D2bTEGxCI9AhV0OsL5Ra5rrxdydGVRkzDRECXmh7wlq7AXd5&time=1613961539&token=c0fd9e10b485ddcb5fb0ba07ff13a1f2&uid=52215360&uuid=71939dc76879698f93f2ccd587aa46fe'
+}
+cookies2 = {  
+   'YOUTH_HEADER': {"Accept-Encoding":"gzip, deflate, br","Cookie":"sensorsdata2019jssdkcross=%7B%22distinct_id%22%3A%2252650047%22%2C%22%24device_id%22%3A%221775cf06bd32ee-05e91848f1c655-754c1651-304500-1775cf06bd4d6c%22%2C%22props%22%3A%7B%22%24latest_traffic_source_type%22%3A%22%E7%9B%B4%E6%8E%A5%E6%B5%81%E9%87%8F%22%2C%22%24latest_referrer%22%3A%22%22%2C%22%24latest_referrer_host%22%3A%22%22%2C%22%24latest_search_keyword%22%3A%22%E6%9C%AA%E5%8F%96%E5%88%B0%E5%80%BC_%E7%9B%B4%E6%8E%A5%E6%89%93%E5%BC%80%22%7D%2C%22first_id%22%3A%221775cf06bd32ee-05e91848f1c655-754c1651-304500-1775cf06bd4d6c%22%7D; Hm_lvt_6c30047a5b80400b0fd3f410638b8f0c=1612172401,1612172435,1612172459,1612172675; Hm_lvt_268f0a31fc0d047e5253dd69ad3a4775=1612172675,1612172689,1612172694,1612172703","Connection":"keep-alive","Referer":"https://kd.youth.cn/h5/20190301taskcenter/ios/index.html?uuid=dca10c5f8a591a5723c4751b7a810e42&sign=1d328d5fda341da43f59753efc2b8b45&channel_code=80000000&uid=52650047&channel=80000000&access=WIfI&app_version=1.8.2&device_platform=iphone&cookie_id=a8ee286656abcecf763e1ecc1bd0fff3&openudid=dca10c5f8a591a5723c4751b7a810e42&device_type=1&device_brand=iphone&sm_device_id=202101152102004426b62b151c979439e02a2ae1f6de490143f6d402d2625c&device_id=50159839&version_code=182&os_version=14.1&cookie=MDAwMDAwMDAwMJCMpN-w09Wtg5-Bb36eh6CPqHualq2jmrCarWOwzY1qhHx2lq_eqmqXr6NthJl7mI-shMmXeqDau4StacS3o7GFonrfrrnEqoJ5iW2EY2Ft&device_model=iPhone_6_Plus&subv=1.5.1&&cookie=MDAwMDAwMDAwMJCMpN-w09Wtg5-Bb36eh6CPqHualq2jmrCarWOwzY1qhHx2lq_eqmqXr6NthJl7mI-shMmXeqDau4StacS3o7GFonrfrrnEqoJ5iW2EY2Ft&cookie_id=a8ee286656abcecf763e1ecc1bd0fff3","Accept":"*/*","Host":"kd.youth.cn","User-Agent":"Mozilla/5.0 (iPhone; CPU iPhone OS 14_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148","Accept-Language":"zh-cn","X-Requested-With":"XMLHttpRequest"},
+   'YOUTH_READBODY': 'p=9NwGV8Ov71o%3DgW5NEpb6rjb84bkaCQyOq-myT0C-Ktb_kF97hamPuz4ZZk3rmRrVU_m2Z51XN3szZYaCPxNG07BYjyjwYkBVGTfTGYPVecze9u-jGHCQmfvey4yZrPyKR-cA01PbV3h61GBiHFc-skGrpoDK0eliCfJPX7f9_IVT-MEKcW_xpZCx-AlW21ohYmv71MFypm63elf7A-o2ExDa5GXZ2qsl46wP6QHuEzzilFjIrN6fcc553JHDBFkgOxoKtlrwOhGmHZv6vuiNVy_P1I2DNrocFZsj5U9kwv-dIOgIm9rHI1PPIqdVJxKgBkw0siTlt7OnnDamngmak47OWpe5-MyiFto_DUnnUfUJQ8zhKpFqGsKy73Mu8JS9ve9-Te6phtuybXukWF07IANC24aocAzcx9cHyXGpI6s3CixWKpUNO7j3n-jfdGu16High0M3myRDYqexStt5o4zWWM7KIqUroMIcYAb9Gm1Ds2m3XRfEKCzZcQ3NdH8Vb-_VGKgWMIidDSZUR1bL7xs4374wZbLYZl49hyaCm7nVym1u55TqvbnWW711g4vKlj8qBZBCr3tnGdW0XkYo94jtSWzEoUxY9LBxdi2Mw2hECDWRcXNhQ7nzockoKH2MD5Fhz-kpUg4s3wv30tdfISJbM8FDZe-65_n2dUkd-PrkJYiQDUnPDIA6rAU3V5C6_YVf_NrgsaWiMNVkxy5InqKaOkwb25G9ddGbjgXZlcuHt0Ll00a8o6KhdSkPsj0ZDfZ4Dc2-iiJB_YFuyu8q15d6lVeq1AjZzCxS1rB9KUqdranV-6ZwbpZpTjCwOTUrziVCjTCEp6Mqt5ScIX6UpTA9xlliLIR8HQ%3D%3D',
+   'YOUTH_REDBODY': 'p=9NwGV8Ov71o%3DGvDnjwMsu_ka-LJ9wnbNzBhA0cz3iHWgEqXEh3bkBC0KSg93aV2LC-S2kpFYl_sQ9Ng1y2zq_SRMZ0l7L8Arl0rmgcn6uCMObkjGBykqoUNnvrLczNZAxsPvldu8lOTH6eBj7eYrYWk7odF79_wWrcR4Bkzgp_MAOYCRCQC5hx8l6JzSgtNLeW43HXGPvy0BfCJobqsd8F0e8zeAFE8ekOTLU2p1yHxAEi9mPewxSAtkaInMDXrIwiz7OU2SNzaW2PPppsbkyTjw2y4DTXJvW56B4ZQTweFabKmT9z8z14iJaJo1vX7IgoG-1qApJzrOO9x4Jf0pCmA1qoGEThjFlki-fHC8uKLmd7cumOW0T8f_6k03ogO9VrYKMhScLOVqlSRtGbDqU0ejCH3SaXg9erGG2uNm6Acpe3Ry6mhBKofTO1ZsrXh6F2Na-7yl-F7hCd7PWqKbVjw-CM1YtL4acZy7mOkm-5Q_lm7MCWiypnd3ZKbyzOQJuDe3qvZFSDvPM7JJUUVvV67LaNR7_Rb9fdR3VWCXtb6co25J7hN1MqOgjGNSlSWWDDnZGxXYtCX7Sj_5X67v-IMNZtlq1plGQQc1NSCeT1Fcu3ExmB28Q6Z1b4SFuPtqyBHFA4o3ygdEttPsLhAlHgLGfo9ZipZWeNWpwDsCegQ9CQtV8AwtXqquYzy3HaWR6IujbigkH7AdvcLjaw5cjCT6Hw5gVckcEG1HHryazPYt8n6QFOBe7rIMFm1178ezgs6qeQo4P_5qeDq8B63Nt-I30iGcfllMh_X2W658YLpFkbRPrlLufcReTpDDMq0VeraCoatxlzUVBZZI1TjjqKqxpyNMtRc22A%3D%3D',
+   'YOUTH_READTIMEBODY': 'p=9NwGV8Ov71o%3DgW5NEpb6rjb84bkaCQyOq-myT0C-Ktb_kF97hamPuz4ZZk3rmRrVU_m2Z51XN3szZYaCPxNG07BYjyjwYkBVGTfTGYPVecze9u-jGHCQmfvey4yZrPyKR-cA01PbV3h61GBiHFc-skGrpoDK0eliCfJPX7f9_IVT-MEKcW_xpZCx-AlW21ohYmv71MFypm63elf7A-o2ExDa5GXZ2qsl46wP6QHuEzzilFjIrN6fcc553JHDBFkgOxoKtlrwOhGmHZv6vuiNVy-VyBh92TQHmr7t2FUEVOv9-HtNNY4n_Dw1naF7z8OgUnMCBXofPnzzyEupy7DNBt139p-bbnIfAsb7FnrzNiPZp1qlolSC7MOSEUTVLgjQugRMyDaaHUhe15B4TjkrFhJgy6DH30mLHff9tI-DGTcKKTHqwNhNVxNBveh_b5p3UZ_UrnfJSGzu-8xJbfYRgpd1WI4k6b2jGw5INd3AyfMe9h9qj6KJjAX18wjD1dkSyoXuHI6OaEdOf0-GIAX-Rbggp8g1octy00Zja7Ya6FcsAikT38xwwk7wmyoatVdIo1J2jKVnpm6AEUdDEZBZN-r5XBnvMFniy-hbUHtxr46RfHCAyY2xah-D3wyzwoM4LYz68_ZKUu-yL2DPAli6KbYvy_WtMvCHKWz158jOy2iB3EH_ChTgbTc_9SWaPC0J4N6z6-DneKTmGZt5nn4K96Ox6nXBzz99bj9y-V8Jv17l9lgmm-2qVBth_yH71y5i2balRN5W2LETZWfdXDVJ1jwEqcRYZjxPpZkjPwg7Tb5FMLSUZ3t-I89TV9OCSyYGIIKiwZcAQ0iIAHFePnrctSo%3D',
+   'YOUTH_WITHDRAWBODY': 'p=9NwGV8Ov71o%3DgW5NEpb6rjb84bkaCQyOq-myT0C-Ktb_kF97hamPuz4ZZk3rmRrVU_m2Z51XN3szZYaCPxNG07BYjyjwYkBVGTfTGYPVecze9u-jGHCQmfvey4yZrPyKR-cA01PbV3h61GBiHFc-skGrpoDK0eliCfJPX7f9_IVT-MEKcW_xpZCx-AlW21ohYmv71MFypm63elf7A-o2ExDa5GXZ2qsl46wP6QHuEzzilFjIrN6fcc553JHDBFkgOxoKtlrwOhGmHZv6vuiNVy-VyBh92TQHmr7t2FUEVOv9-HtNNY4n_DzIF8vlBcuyEWe-Jfc8sagCzok-2QKw3bidqLlTmJjID4JV5LLaMwhuqAG3WmRVhb-lwtLSRkw4lzzJlPfOkOcHVb8PtjRnlNB1WB9edoUUtk5QH112zZje-I_XTs2E9Y3S8-wbQznpY6dazAARen5ADSRfWqTpOikKey-yRZtoS4ulf4sTjBmE-2HEo-UKPsixoCfYYpKA2HuzXyrcnpI8P5cv12CAGpSbPRBn2Qfvsqs6_LrdQruUwFT6_2EH1OKpXHIUVIxyf7dpFneheTnE3Z0sS_BWrhLuF-6DIelK0qVeDDZxa8pwSCpefe4FyWQ5XrYx9WG_q15mU874TkgYpqV2LO0wyg4sZNtqonAgjY805wfoeM7XscXPTBqrVpul-NcL4fYk-LZD-_9_XnKN1D0zzRrykN-mYY4NNqmmLUqrintLPmBBkXvTkiChrPSLBcUlIk1JnfO82KBEVATHW5qwrSYZuzfHrloyAFB27g8k1f9MdPZPO8kDnXtpirwtlsz3G9CzXm7TjdAOe7oMgCyOebyj8BU%3D',
+   'YOUTH_SHAREBODY': 'access=WIFI&app_version=1.8.2&article_id=36313258&channel=80000000&channel_code=80000000&cid=80000000&client_version=1.8.2&device_brand=iphone&device_id=50190055&device_model=iPhone&device_platform=iphone&device_type=iphone&from=0&is_hot=0&isnew=1&mobile_type=2&net_type=1&openudid=c0f71901b54a06e7b61f2b8ed66c8f5f&os_version=14.1&phone_code=c0f71901b54a06e7b61f2b8ed66c8f5f&phone_network=WIFI&platform=3&request_time=1613308347&resolution=750x1624&sign=0a7bb2edd9f203257233fa0266780957&sm_device_id=202101152102004426b62b151c979439e02a2ae1f6de490143f6d402d2625c&stype=WEIXIN&szlm_ddid=D2bTEGxCI9AhV0OsL5Ra5rrxdydGVRkzDRECXmh7wlq7AXd5&time=1613308347&uid=52650047&uuid=c0f71901b54a06e7b61f2b8ed66c8f5f',
+   'YOUTH_STARTBODY':'access=WIFI&app_version=1.8.2&channel=80000000&channel_code=80000000&cid=80000000&client_version=1.8.2&device_brand=iphone&device_id=50190055&device_model=iPhone&device_platform=iphone&device_type=iphone&isnew=1&mobile_type=2&net_type=1&openudid=c0f71901b54a06e7b61f2b8ed66c8f5f&os_version=14.1&phone_code=c0f71901b54a06e7b61f2b8ed66c8f5f&phone_network=WIFI&platform=3&request_time=1613961646&resolution=750x1624&sm_device_id=202101152102004426b62b151c979439e02a2ae1f6de490143f6d402d2625c&szlm_ddid=D2bTEGxCI9AhV0OsL5Ra5rrxdydGVRkzDRECXmh7wlq7AXd5&time=1613961647&token=1431450ba6edd83f1a94da4594074606&uid=52650047&uuid=c0f71901b54a06e7b61f2b8ed66c8f5f'
+}
+cookies3 = {  
+   'YOUTH_HEADER': {"Accept-Encoding":"gzip, deflate, br","Cookie":"sensorsdata2019jssdkcross=%7B%22distinct_id%22%3A%2252217968%22%2C%22%24device_id%22%3A%22176a2f201e1698-0b9e3ac204f05f8-3c176850-250125-176a2f201e32b7%22%2C%22props%22%3A%7B%22%24latest_traffic_source_type%22%3A%22%E7%9B%B4%E6%8E%A5%E6%B5%81%E9%87%8F%22%2C%22%24latest_referrer%22%3A%22%22%2C%22%24latest_referrer_host%22%3A%22%22%2C%22%24latest_search_keyword%22%3A%22%E6%9C%AA%E5%8F%96%E5%88%B0%E5%80%BC_%E7%9B%B4%E6%8E%A5%E6%89%93%E5%BC%80%22%7D%2C%22first_id%22%3A%22176a2f201e1698-0b9e3ac204f05f8-3c176850-250125-176a2f201e32b7%22%7D; Hm_lvt_268f0a31fc0d047e5253dd69ad3a4775=1609849966,1610111046,1610758725,1611137573; Hm_lvt_6c30047a5b80400b0fd3f410638b8f0c=1609051544","Connection":"keep-alive","Referer":"https://kd.youth.cn/html/taskCenter/index.html?uuid=fac02e6a0f192390905aa4008229173a&sign=9ca33b8aab0edabef417f11b31a4abb6&channel_code=80000000&uid=52217968&channel=80000000&access=WIfI&app_version=1.8.2&device_platform=iphone&cookie_id=8410efd17cea05fa8c75ed34a1ad8e1a&openudid=fac02e6a0f192390905aa4008229173a&device_type=1&device_brand=iphone&sm_device_id=2020121316263394395ebc966eb9e446c3ca35160d4c8701700ff3ef2bfc02&device_id=49237123&version_code=182&os_version=13.5.1&cookie=MDAwMDAwMDAwMJCMpN-w09Wtg5-Bb36eh6CPqHualq2jmrCarWOwzX2xhbKgmLCoqmqXr6NthJl7mI-shMmXeqDau4StacS3o7GFonabrqmuqoKvn7CEY2Ft&device_model=iPhone_6&subv=1.5.1&&cookie=MDAwMDAwMDAwMJCMpN-w09Wtg5-Bb36eh6CPqHualq2jmrCarWOwzX2xhbKgmLCoqmqXr6NthJl7mI-shMmXeqDau4StacS3o7GFonabrqmuqoKvn7CEY2Ft&cookie_id=8410efd17cea05fa8c75ed34a1ad8e1a","Accept":"*/*","Host":"kd.youth.cn","User-Agent":"Mozilla/5.0 (iPhone; CPU iPhone OS 13_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148","Accept-Language":"zh-cn","X-Requested-With":"XMLHttpRequest"},
+   'YOUTH_READBODY': 'p=9NwGV8Ov71o%3DgW5NEpb6rjb84bkaCQyOq-myT0C-Ktb_kF97hamPuz4ZZk3rmRrVU_m2Z51XN3szZYaCPxNG07BYjyjwYkBVGTfTGYPVecze9u-jGHCQmfvey4yZrPyKR-cA01PbV3h61GBiHFc-skGrpoDK0eliCfJPX7f9_IVT-MEKcW_xpZCx-AlW21ohYkMBz-k8vf1pQA208HJ8b6QY6g5K1oRRCJSyR4ebJf6aJZ9_wlVuug5tgUvW64vf3qWu-LcqYvhlfhDacC9lY_b4H8g2QY99engMA9WGcWRhGDGYcqKSsI6FM0dnRWz4oDPpmvumBiLhftqBX3LhtDOERsyKT4RzF1NDFSuoRXpVl-ppPa-DBbBCR5IhyLhRZ3O4hYMgDq9qXluur1QhBWVl3Sr5XRX8OO16JbfkOKVBkL1uhp275uekylsJE5gO2ZggN9r7TWj9Vn0LQt16l3LFzlX1NhoSnNaHR0msyYLQTsa9c6DA0EFawnpoEzUqdNTBpwiI-66hzlYPIRBcl_1OJmrkRtYBQf6K6BXXZeRna8uschi4qWb_xVzFGyRbmwIFREWeSKMUkX7eO-DnhLmhgR7Yv0Bckg3VA4gRyhsqlDGoLg3JfARUk5pvoTbUc_ZKoZb7p5ccfyCpYmbqj0yp8ctHZbz3GeuEfYf_XIeHoHO_AKlY6MwJqTTF3l_lYdGHYJcYdn8Spl7wKfIhozcI9zITdCZKayibXa839vdnfmp0l9XIPXhRgeT9xQjzcLZJ0Nde9Pkv70RvsaCjVa9U7eKa2uFD1YvZKgkKxpO5GT1Rd5ovNzHFglkvhkQnvYsh3uDV4SdgVCroj3FQIbD9Xg5Eg7Fl-g%3D%3D',
+   'YOUTH_REDBODY': '',
+   'YOUTH_READTIMEBODY': 'p=9NwGV8Ov71o%3DgW5NEpb6rjb84bkaCQyOq-myT0C-Ktb_kF97hamPuz4ZZk3rmRrVU_m2Z51XN3szZYaCPxNG07BYjyjwYkBVGTfTGYPVecze9u-jGHCQmfvey4yZrPyKR-cA01PbV3h61GBiHFc-skGrpoDK0eliCfJPX7f9_IVT-MEKcW_xpZCx-AlW21ohYkMBz-k8vf1pQA208HJ8b6QY6g5K1oRRCJSyR4ebJf6aJZ9_wlVuug5tgUvW64vf3qWu-LcqYvhlfhDacC9lY_YS3-NQy2O_yFGMAcMrymjkjKgwPVCo2G_rMw9psP17uBWqjFPr_6HBCu2WSGkubhawVU3mj8iKeajoRQ38GBHJyc62f7rhajPNip7u6qzwMN5zS_L4kaXcHPv64ubVLL2XNl-xEC6Fjd9Wsz030cePbK8_sGj2g7HepQ2mCLiXcmCzNzag-BNngxpkgXpseVUTQ4MYYamQWdG2AjN6gTvg_lRxNeCaEayhDj0Ae6JCECNIXG41AZ-R0nN-iDzgQtPddPz1siVCEuwabG7UMab6tFj68v7YXoNv1aDB_ajERIX_4QBD_taOsOafG8kTlN9EOJJUxR6McLRq3P5m4hNjVNHNupKCJ_lrYzSUg4JB7ladrbXzRIKKi8_AeMZxawgDB6vS2Z4vvVhN3Amf2YJKoVvvDSqMeVZVFmwMHXMy90P761Ems3_O2Efh9bnCISB9MUpjRANWwk0PwR0_qMg9ZF-22OuPEiqmJ1OGjqL9wfAC5QA7_2VQEmSr-85hfh8_3jx3WwV41S77lAvAJlpDW-0rtMiJHhZE5HY1kSiaGqSREex9w5izgrcH1213Fwc%3D',
+   'YOUTH_WITHDRAWBODY': 'p=9NwGV8Ov71o%3DgW5NEpb6rjb84bkaCQyOq-myT0C-Ktb_kF97hamPuz4ZZk3rmRrVU_m2Z51XN3szZYaCPxNG07BYjyjwYkBVGTfTGYPVecze9u-jGHCQmfvey4yZrPyKR-cA01PbV3h61GBiHFc-skGrpoDK0eliCfJPX7f9_IVT-MEKcW_xpZCx-AlW21ohYkMBz-k8vf1pQA208HJ8b6QY6g5K1oRRCJSyR4ebJf6aJZ9_wlVuug5tgUvW64vf3qWu-LcqYvhlfhDacC9lY_YS3-NQy2O_yFGMAcMrymjkjKgwPVCo2G_fZMRYy7WMeoJLs6mHLOavuGDZWvm3Wije7XMyAxHxG41e_dtsOEyg6rgDc93JJEVtz-jxOy0rcFX27MiwSDDlfdlYK7iPMAmACyRnEMtjiLgNPcK7RqA0XQx9DcAP4CpUenhEdWHXGrv4oitCzI1NG5RuxnLHdBcx4e7ouQUIAmVB0G_I0_PdIJFShzz8qee322t5JMBxzRdDLwavmbGp-2ar0AW87ieG4uQ5tsdjbEKS7Knygqi4MwASPyUAt1LkCXlK90gJORRg93le8omQj5dWmReoVnzizlYkwOrgMbh0DQobLA2DIgT1NpNAb-L5r7ESSEMFCGsA9z69rlqXyKivqZfM1MkVkKkNGLzo_0T_woYevGShX5Q8SFy2uFApzcxT-O1U-Fh_kjnia-B5lgs93910ImqIQSjqnJKRdMDyqiEfZv1XsDMUCWgq44YL5Yybj2AbW2_ps146hGx2qshOVLYL_4mL5G87uj_DxAAjp_2mybNw9ojUiXA578eJ85kL-KH7AWhaLqVj-JJ4wJX4pcUIq7Q%3D',
+   'YOUTH_SHAREBODY': 'access=WIFI&app_version=1.8.2&article_id=36295331&channel=80000000&channel_code=80000000&cid=80000000&client_version=1.8.2&device_brand=iphone&device_id=50189798&device_model=iPhone&device_platform=iphone&device_type=iphone&from=0&is_hot=0&isnew=1&mobile_type=2&net_type=1&openudid=e06ac71d44743ab48466371b3d5ddaf7&os_version=14.1&phone_code=e06ac71d44743ab48466371b3d5ddaf7&phone_network=WIFI&platform=3&request_time=1613308476&resolution=750x1624&sign=1b00dc33a13ba98c6fb8fe6eaaba74cd&sm_device_id=202101152102004426b62b151c979439e02a2ae1f6de490143f6d402d2625c&stype=WEIXIN&szlm_ddid=D2bTEGxCI9AhV0OsL5Ra5rrxdydGVRkzDRECXmh7wlq7AXd5&time=1613308477&uid=52217968&uuid=e06ac71d44743ab48466371b3d5ddaf7',
+   'YOUTH_STARTBODY':'access=WIFI&app_version=1.8.2&channel=80000000&channel_code=80000000&cid=80000000&client_version=1.8.2&device_brand=iphone&device_id=50189798&device_model=iPhone&device_platform=iphone&device_type=iphone&isnew=1&mobile_type=2&net_type=1&openudid=e06ac71d44743ab48466371b3d5ddaf7&os_version=14.1&phone_code=e06ac71d44743ab48466371b3d5ddaf7&phone_network=WIFI&platform=3&request_time=1613961705&resolution=750x1624&sm_device_id=202101152102004426b62b151c979439e02a2ae1f6de490143f6d402d2625c&szlm_ddid=D2bTEGxCI9AhV0OsL5Ra5rrxdydGVRkzDRECXmh7wlq7AXd5&time=1613961706&token=3ebac25c18e73d5de593d01e5a4fb168&uid=52217968&uuid=e06ac71d44743ab48466371b3d5ddaf7'
+}
+cookies4 = {  
+   'YOUTH_HEADER': {"Accept-Encoding":"gzip, deflate, br","Cookie":"sensorsdata2019jssdkcross=%7B%22distinct_id%22%3A%2252310964%22%2C%22%24device_id%22%3A%2217762d546e6383-0eed02c56431378-754c1651-304500-17762d546e7e9c%22%2C%22props%22%3A%7B%22%24latest_traffic_source_type%22%3A%22%E7%9B%B4%E6%8E%A5%E6%B5%81%E9%87%8F%22%2C%22%24latest_referrer%22%3A%22%22%2C%22%24latest_referrer_host%22%3A%22%22%2C%22%24latest_search_keyword%22%3A%22%E6%9C%AA%E5%8F%96%E5%88%B0%E5%80%BC_%E7%9B%B4%E6%8E%A5%E6%89%93%E5%BC%80%22%7D%2C%22first_id%22%3A%2217762d546e6383-0eed02c56431378-754c1651-304500-17762d546e7e9c%22%7D; Hm_lvt_268f0a31fc0d047e5253dd69ad3a4775=1612270883,1612273403; Hm_lvt_6c30047a5b80400b0fd3f410638b8f0c=1612270883,1612273403","Connection":"keep-alive","Referer":"https://kd.youth.cn/h5/20190301taskcenter/ios/index.html?uuid=9d7733c1f237edf70bd26bfdbced4648&sign=ce4465d31d4cd76a6ba8fc6d9db12f05&channel_code=80000000&uid=52310964&channel=80000000&access=WIfI&app_version=1.8.2&device_platform=iphone&cookie_id=7d659e7db8b7194d06acd9ba999b40bd&openudid=9d7733c1f237edf70bd26bfdbced4648&device_type=1&device_brand=iphone&sm_device_id=202101152102004426b62b151c979439e02a2ae1f6de490143f6d402d2625c&device_id=50190081&version_code=182&os_version=14.1&cookie=MDAwMDAwMDAwMJCMpN-w09Wtg5-Bb36eh6CPqHualq2jmrCarWOwzYGxhHygmK-oqmqXr6NthJl7mI-shMmXeqDau4StacS3o7GFonrfrs_EqoN5l22EY2Ft&device_model=iPhone_6_Plus&subv=1.5.1&&cookie=MDAwMDAwMDAwMJCMpN-w09Wtg5-Bb36eh6CPqHualq2jmrCarWOwzYGxhHygmK-oqmqXr6NthJl7mI-shMmXeqDau4StacS3o7GFonrfrs_EqoN5l22EY2Ft&cookie_id=7d659e7db8b7194d06acd9ba999b40bd","Accept":"*/*","Host":"kd.youth.cn","User-Agent":"Mozilla/5.0 (iPhone; CPU iPhone OS 14_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148","Accept-Language":"zh-cn","X-Requested-With":"XMLHttpRequest"},
+   'YOUTH_READBODY': 'p=9NwGV8Ov71o%3DgW5NEpb6rjb84bkaCQyOq-myT0C-Ktb_kF97hamPuz4ZZk3rmRrVU_m2Z51XN3szZYaCPxNG07BYjyjwYkBVGTfTGYPVecze9u-jGHCQmfvey4yZrPyKR-cA01PbV3h61GBiHFc-skGrpoDK0eliCfJPX7f9_IVT-MEKcW_xpZCx-AlW21ohYkkLs9mFn0zIesL0yyJmAY7CvoIStV9kKIiJUoxjK4sGMZJ-9K5MFtB9bDDXbpKhzyi1Ql9GxBueMb_UbzcE3H1tv2zi2-_uGvTcTSLiD3Dm1iMP4TCzC6cBCR5hie_G4mVMk0qghe7QCS8jqXG_dk7QBuJNgUydvEKpGaR_gLMEX_Yzb3rSWEfLNdLBb9cCuJcjd7vOg__BjTCYsSnGa7qD21ZZIEF9rj3m10yifzH2V-K_OFS4fPI1_a7_g_QgdTZAMf1duN4xII-3ygd4Xs51m7yfNz7R9-Og3-rPgXqoHFoRncNQ0-UFIPXyr5RX28_FsqimUbaUwLF4BN4Foa3_KDTJg5_9_cfWrfImVRYjBEZjrYy8TN0Ttr73fYZbwsdDUupxbp-Oag4LAwUa6hvqY9T9_M0hMYYCi1DSJoMODNwxBhxPnpap88OG8O1Ca5fAr8xF7bDBcc6tTrrYg8cTjdpU7uqbckdEULiDgEBOnUY0aKAVha4ZIiPwP2-iJ4NxWqQvQjuycpVm_8AMzuOq0p8GiVsNvzrucWsI5oRzBKx-6_LH-kg8baqKUKGnSFLQBVgF2wsF-G4UC_CTTCBqiw8CKx--khybhP6eA__ideaggDrIbj6YuLZ-5A89aCT96M7Jeyj3D-U_pZIfd88DR8kzUnvkAQ%3D%3D',
+   'YOUTH_REDBODY': '',
+   'YOUTH_READTIMEBODY': 'p=9NwGV8Ov71o%3DgW5NEpb6rjb84bkaCQyOq-myT0C-Ktb_kF97hamPuz4ZZk3rmRrVU_m2Z51XN3szZYaCPxNG07BYjyjwYkBVGTfTGYPVecze9u-jGHCQmfvey4yZrPyKR-cA01PbV3h61GBiHFc-skGrpoDK0eliCfJPX7f9_IVT-MEKcW_xpZCx-AlW21ohYkkLs9mFn0zIesL0yyJmAY7CvoIStV9kKIiJUoxjK4sGMZJ-9K5MFtB9bDDXbpKhzyi1Ql9GxBueMb_UbzcE3H3dU5-8UUVdfSb1G-KkDjNmNYwS30KY6yaoob_fxXywKGW3ZTUgUfD2KD14pqL7z9gYxvVnMgYy5tGRddz7aK3dzeRSUVUe54c6QtK7oVfUwMFZpD1bFP3lcZ8GxVcPWOcf3l8FJI-rPuKSTqON-yKSTLuQ64tr8IqNUv4FUuvN4RsangO3psne0n91-5ZM8ASlXIqOlspTVOczg-sr-UFhYhebCDFtMYqrMcJug1t62b7q1Zvn9rliLUwOHMShuJfSyzrv7nkUftFlXXM7RpDVt0c6eG9-OOp8xUMMH8UkC8Qnls-61Hc2H1BlF07YeDsGE5VfAg3KSUj2mVFu2zRT7bqUcwfseACoiLbr7TRc6pmghm2Vbz8P-BAkG31vYDNEgygX1IC7jLgejPVouJEoc5Kv0t12GyOYoAXnetBaZ9okzhLFrumOshAyTgPfZW823qAuHilj50X2PFrUmakOGo5jjT1Sm51kTQdpIIZXBjyk2YW0x7cLFQUviqGhTa_fmZ8eM8qaouNHL1A0ighDW6iw4XpWSVyGpDK12csrJl0ObADecLia6_9LsbiADc4%3D',
+   'YOUTH_WITHDRAWBODY': 'p=9NwGV8Ov71o%3DgW5NEpb6rjb84bkaCQyOq-myT0C-Ktb_kF97hamPuz4ZZk3rmRrVU_m2Z51XN3szZYaCPxNG07BYjyjwYkBVGTfTGYPVecze9u-jGHCQmfvey4yZrPyKR-cA01PbV3h61GBiHFc-skGrpoDK0eliCfJPX7f9_IVT-MEKcW_xpZCx-AlW21ohYkkLs9mFn0zIesL0yyJmAY7CvoIStV9kKIiJUoxjK4sGMZJ-9K5MFtB9bDDXbpKhzyi1Ql9GxBueMb_UbzcE3H3dU5-8UUVdfSb1G-KkDjNmNYwS30KY6ya9fWVS57tu_yFhiDNQeBUbgRYmxzbzN1UDXHRM9s38SaX002cpTNMENy72HgGjLG0Ex3Z7shopeBkm_TgvkdGLCL9RA4LT9p880oh0mQJFCtkai4gKW9GPzSuWMyDrP3QIaYZErrrkHv-gpTlzmP594fdQXBJRWJbhzJHB52ZLCOpojAGMAVu0XvYToSFvj2skS3Ngj4d1-R9Es59qz12Y51O16R6Ov0weM-e1tJo_RF6vS-gpFzcTEDb1j3hEllDfxl6xeN3KEYZ7AkL1l6uK91rKFoWMjqvgpiwLBYsmQKjavDnYMD788XZmbWy_2vuT-24hLi0jRz2tPM9h7GlI7vSYPSPXs-ReqWS33COdlU0mADCyHTuaS6nZWzCgE3gRDR3dqDpzsOXL0ELopm04bRPDzKvU_PtbT9si5EaShT95Krw2ZvakRP3V8bgkrc5yt-mpop8NWTGeGR13DfluAhz7_uehMm1tw2VsT95Z0UYmFfrmSIjiQbpIQP7Vc6C9udlshyB-ibf1ea-xUeuTmA0isztKQdE%3D',
+   'YOUTH_SHAREBODY': 'access=WIFI&app_version=1.8.2&article_id=36314134&channel=80000000&channel_code=80000000&cid=80000000&client_version=1.8.2&device_brand=iphone&device_id=50190081&device_model=iPhone&device_platform=iphone&device_type=iphone&from=0&is_hot=0&isnew=1&mobile_type=2&net_type=1&openudid=9d7733c1f237edf70bd26bfdbced4648&os_version=14.1&phone_code=9d7733c1f237edf70bd26bfdbced4648&phone_network=WIFI&platform=3&request_time=1613308563&resolution=750x1624&sign=33e1f382893477f31f7fd342865906c4&sm_device_id=202101152102004426b62b151c979439e02a2ae1f6de490143f6d402d2625c&stype=WEIXIN&szlm_ddid=D2bTEGxCI9AhV0OsL5Ra5rrxdydGVRkzDRECXmh7wlq7AXd5&time=1613308563&uid=52310964&uuid=9d7733c1f237edf70bd26bfdbced4648',
+   'YOUTH_STARTBODY':'access=WIFI&app_version=1.8.2&channel=80000000&channel_code=80000000&cid=80000000&client_version=1.8.2&device_brand=iphone&device_id=50190081&device_model=iPhone&device_platform=iphone&device_type=iphone&isnew=1&mobile_type=2&net_type=1&openudid=9d7733c1f237edf70bd26bfdbced4648&os_version=14.1&phone_code=9d7733c1f237edf70bd26bfdbced4648&phone_network=WIFI&platform=3&request_time=1613961763&resolution=750x1624&sm_device_id=202101152102004426b62b151c979439e02a2ae1f6de490143f6d402d2625c&szlm_ddid=D2bTEGxCI9AhV0OsL5Ra5rrxdydGVRkzDRECXmh7wlq7AXd5&time=1613961764&token=0f6cc7c54950678ae0e20b3d396a607f&uid=52310964&uuid=9d7733c1f237edf70bd26bfdbced4648'
+}
+cookies5 = {  
+   'YOUTH_HEADER': {"Accept-Encoding":"gzip, deflate, br","Cookie":"sensorsdata2019jssdkcross=%7B%22distinct_id%22%3A%2253461944%22%2C%22%24device_id%22%3A%221776327786c1ef-0b3b9373894e19-754c1651-304500-1776327786dcf8%22%2C%22props%22%3A%7B%22%24latest_traffic_source_type%22%3A%22%E7%9B%B4%E6%8E%A5%E6%B5%81%E9%87%8F%22%2C%22%24latest_referrer%22%3A%22%22%2C%22%24latest_referrer_host%22%3A%22%22%2C%22%24latest_search_keyword%22%3A%22%E6%9C%AA%E5%8F%96%E5%88%B0%E5%80%BC_%E7%9B%B4%E6%8E%A5%E6%89%93%E5%BC%80%22%7D%2C%22first_id%22%3A%221776327786c1ef-0b3b9373894e19-754c1651-304500-1776327786dcf8%22%7D; Hm_lvt_268f0a31fc0d047e5253dd69ad3a4775=1612277142,1612277148,1612317344,1612317623; Hm_lvt_6c30047a5b80400b0fd3f410638b8f0c=1612276752,1612277139,1612317344,1612317621","Connection":"keep-alive","Referer":"https://kd.youth.cn/h5/20190301taskcenter/ios/index.html?uuid=71939dc76879698f93f2ccd587aa46fe&sign=4c43815b0e74a4ba5ff7221b7a951417&channel_code=80000000&uid=53461944&channel=80000000&access=WIfI&app_version=1.8.2&device_platform=iphone&cookie_id=1c02ea6071fb609aeefeb40200fce703&openudid=71939dc76879698f93f2ccd587aa46fe&device_type=1&device_brand=iphone&sm_device_id=202101152102004426b62b151c979439e02a2ae1f6de490143f6d402d2625c&device_id=50192295&version_code=182&os_version=14.1&cookie=MDAwMDAwMDAwMJCMpN-w09Wtg5-Bb36eh6CPqHualIejl66rtWSwt59phXyp4LDPyGl9onqkj3ZqYJa8Y898najWsJupZLC3fbKFso7fr8-yapqGcXY&device_model=iPhone_6_Plus&subv=1.5.1&&cookie=MDAwMDAwMDAwMJCMpN-w09Wtg5-Bb36eh6CPqHualIejl66rtWSwt59phXyp4LDPyGl9onqkj3ZqYJa8Y898najWsJupZLC3fbKFso7fr8-yapqGcXY&cookie_id=1c02ea6071fb609aeefeb40200fce703","Accept":"*/*","Host":"kd.youth.cn","User-Agent":"Mozilla/5.0 (iPhone; CPU iPhone OS 14_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148","Accept-Language":"zh-cn","X-Requested-With":"XMLHttpRequest"},
+   'YOUTH_READBODY': 'p=9NwGV8Ov71o%3DgW5NEpb6rjb84bkaCQyOq-myT0C-Ktb_kF97hamPuz4ZZk3rmRrVU_m2Z51XN3szZYaCPxNG07BYjyjwYkBVGTfTGYPVecze9u-jGHCQmfvey4yZrPyKR-cA01PbV3h61GBiHFc-skGrpoDK0eliCfJPX7f9_IVT-MEKcW_xpZCx-AlW21ohYodHqoBy4zgUAtNlbLsJdA77-xwLqOd6kgIJTxFfYJbH6q-Lgp0KLiV103292vCMILWMDjGc1AblOFUMP84XCdYl3b3JTkzkCLGP_iFP8qtPWCQJnOHlvfVGqFCodY6gmkCqlLujD_WgN743MYjtwLHPqxerMT73EmgocZpafTfJk6nMUYHy6DAYxYEuuubZiJOpQ12QgALdz9rIiFrI95u4IdSkWy3nCuuwLzRJCRRtulDnozz4LZ059spQSreVFlU5XizqKQLB4CCaxYr_Qe9i_9qGvs2A7_X8UtnwkIoAsrKkoEZEhN1dcEbWokdSyzKzAZNtuaNzPRuOp-NAREPzKBNpQFC-6ISyDW9HM-6Mk9YoFobeml3S2cVf08EC6nImKwWlQdyRVUXpcVQbXATlk8l7llXc9WT_rfFWAQLhLzmj9UlshWGMmzAmhPNGGsTl4HNlBzDEvUi-d6QbA3X95qXqXWr9r-kEsGTK1iNTEcpCr21PAELzbu8ZF3stqYzvqC8oftDcSpUdPsKWDcI9CcjBWdu8AbHT1e6JoPvwk7Dusjzo3utyY_7uc-J2IdFgl-r3qeLV6d4I9lF8fiAf9HcUKBuTVT55HPYz6A2uLxLN3uVanNGzuXhgalhwYOkt8ff3JCJ4BeQ1-RYMcQYxtv2xKfjRmQ%3D%3D',
+   'YOUTH_REDBODY': '',
+   'YOUTH_READTIMEBODY': 'p=9NwGV8Ov71o%3DgW5NEpb6rjb84bkaCQyOq-myT0C-Ktb_kF97hamPuz4ZZk3rmRrVU_m2Z51XN3szZYaCPxNG07BYjyjwYkBVGTfTGYPVecze9u-jGHCQmfvey4yZrPyKR-cA01PbV3h61GBiHFc-skGrpoDK0eliCfJPX7f9_IVT-MEKcW_xpZCx-AlW21ohYodHqoBy4zgUAtNlbLsJdA77-xwLqOd6kgIJTxFfYJbH6q-Lgp0KLiV103292vCMILWMDjGc1AblOFUMP84XCdaVUhXy5a2bV6Z_iS6BN1AYPeLCUh9_L9qbhZ8wqnj8cXKOxMPK_0QCxoRvr-95nvrjzGmpONHlbvGMSSKrZMqWdn3cJ76NUWktuES31wkvgu8zyJwBC3x6IKmimhStosCotC8qJP6MCmq71nAMPH46TIapiivZKg7UHoXYPbMP_27Mg6tTmeGPw3iGM37e3vEyG3GnnEGv0Eu64tcn387koaSf_PijOhFicit2bRYz_Cx3mlzFbW3YBCq_0QT3oUigAQI698jtc5y3gZe0JorcppbxEnLuzdsPDXIAr7dq-5TpcE95jfUmwiYwDycW48ugR9GxS3N-mSgi4zSJVig4I1aPUDpH-OPAwV17-Sg1XDAFLlA_xHHp-zXCNb-YJn6DnUSnFzzNMnJzsQ4lEyUUA2Kt_ujq6xUL-TfAottWMqBY28xX-Si5LbnO6OBEyLg5yJ7gnkAz1166hTBndDgFqaS9_mT3TKngIsVLvw81-Fcuzrc-eDImij7opsV8rqQ_2tn4OkwwSBfTAf1Wj3hVELTPEbhhoGh54Wbrr2o7fW405mAtlWqYLrjnrireWFM%3D',
+   'YOUTH_WITHDRAWBODY': 'p=9NwGV8Ov71o%3DgW5NEpb6rjb84bkaCQyOq-myT0C-Ktb_kF97hamPuz4ZZk3rmRrVU_m2Z51XN3szZYaCPxNG07BYjyjwYkBVGTfTGYPVecze9u-jGHCQmfvey4yZrPyKR-cA01PbV3h61GBiHFc-skGrpoDK0eliCfJPX7f9_IVT-MEKcW_xpZCx-AlW21ohYodHqoBy4zgUAtNlbLsJdA77-xwLqOd6kgIJTxFfYJbH6q-Lgp0KLiV103292vCMILWMDjGc1AblOFUMP84XCdaVUhXy5a2bV6Z_iS6BN1AYPeLCUh9_L9pJpnADFIC2QkiMGjHaOuOIEKv2FHQvQ4jJLsn4AX1hk6kUDnz5rnWKV2t2HXx7QRcBzku-q5wJVNL_AwPD0yNV6yVjFDbRggVpM-hYS5J2RfVFIwwHhMAHoN4XbP53LUOfy0rtxRwbXteCt1gcTYFZBAVr4QTkrECvwp1prLLVvSqBWsi90v9itaF5EQt_1yQnB8QmXovkxmJXR4bc_DunqQv-OYwBmzQD-1HaMrD4hg4rvynopMEAi0pCgAhY7Ou0XwIRvg8jU2mv0nFZ5FhmpBIWyfqHX34Mc9HvphJFTLEQUV53GIO8-dz5nh2GW2feugckvv6-XKhPEfXD4Znt7i933twFzVsMe3VpfyqMd31cV76FQ_Qj_yyJXNibhjGKcZcl-uluVb0aecc17hu2s6pVax6YYxTcrZkOka2SihjSXPr1xEATRFFmAyRaQipvhRLFYkIaQBN8N7En-aq-jaK20RvYdZMca0iLzgHqjV0v5HCLubDsRfYiuQTHHLHbItuMxFegYtlzkb7k0vwd51ciNSyX-jw%3D',
+   'YOUTH_SHAREBODY': 'access=WIFI&app_version=1.8.2&article_id=32969653&channel=80000000&channel_code=80000000&cid=80000000&client_version=1.8.2&device_brand=iphone&device_id=50192295&device_model=iPhone&device_platform=iphone&device_type=iphone&from=0&is_hot=0&isnew=1&mobile_type=2&net_type=1&openudid=1053fc49533602cf84dcf3f326277ab8&os_version=14.1&phone_code=1053fc49533602cf84dcf3f326277ab8&phone_network=WIFI&platform=3&request_time=1613308639&resolution=750x1624&sign=d52006243b5cdb82455a5396195dbf28&sm_device_id=202101152102004426b62b151c979439e02a2ae1f6de490143f6d402d2625c&stype=WEIXIN&szlm_ddid=D2bTEGxCI9AhV0OsL5Ra5rrxdydGVRkzDRECXmh7wlq7AXd5&time=1613308640&uid=53461944&uuid=1053fc49533602cf84dcf3f326277ab8',
+   'YOUTH_STARTBODY':'access=WIFI&app_version=1.8.2&channel=80000000&channel_code=80000000&cid=80000000&client_version=1.8.2&device_brand=iphone&device_id=50192295&device_model=iPhone&device_platform=iphone&device_type=iphone&isnew=1&mobile_type=2&net_type=1&openudid=1053fc49533602cf84dcf3f326277ab8&os_version=14.1&phone_code=1053fc49533602cf84dcf3f326277ab8&phone_network=WIFI&platform=3&request_time=1613961826&resolution=750x1624&sm_device_id=202101152102004426b62b151c979439e02a2ae1f6de490143f6d402d2625c&szlm_ddid=D2bTEGxCI9AhV0OsL5Ra5rrxdydGVRkzDRECXmh7wlq7AXd5&time=1613961826&token=2270535a8693ba78dcad5fca423cb3f3&uid=53461944&uuid=1053fc49533602cf84dcf3f326277ab8'
+}
+cookies6 = {  
+   'YOUTH_HEADER': {"Accept-Encoding":"gzip, deflate, br","Cookie":"sensorsdata2019jssdkcross=%7B%22distinct_id%22%3A%2252310878%22%2C%22%24device_id%22%3A%2217781cf63f2836-08fba03bdfd516-754c1651-304500-17781cf63f3f69%22%2C%22props%22%3A%7B%22%24latest_traffic_source_type%22%3A%22%E7%9B%B4%E6%8E%A5%E6%B5%81%E9%87%8F%22%2C%22%24latest_referrer%22%3A%22%22%2C%22%24latest_referrer_host%22%3A%22%22%2C%22%24latest_search_keyword%22%3A%22%E6%9C%AA%E5%8F%96%E5%88%B0%E5%80%BC_%E7%9B%B4%E6%8E%A5%E6%89%93%E5%BC%80%22%7D%2C%22first_id%22%3A%2217781cf63f2836-08fba03bdfd516-754c1651-304500-17781cf63f3f69%22%7D; Hm_lvt_268f0a31fc0d047e5253dd69ad3a4775=1612791424,1612791853,1612791905,1612792109; Hm_lvt_6c30047a5b80400b0fd3f410638b8f0c=1612791424,1612791853,1612791905,1612792109","Connection":"keep-alive","Referer":"https://kd.youth.cn/h5/20190301taskcenter/ios/index.html?uuid=2d8f2c1420f53421e4221325bce4e5ab&sign=66c8ba8face8f49bff1dd09ad102e83e&channel_code=80000000&uid=52310878&channel=80000000&access=WIfI&app_version=1.8.2&device_platform=iphone&cookie_id=9f782e140e01cca86ca1afd8420bbf6d&openudid=2d8f2c1420f53421e4221325bce4e5ab&device_type=1&device_brand=iphone&sm_device_id=202101152102004426b62b151c979439e02a2ae1f6de490143f6d402d2625c&device_id=50330269&version_code=182&os_version=14.1&cookie=MDAwMDAwMDAwMJCMpN-w09Wtg5-Bb36eh6CPqHualq2jmrCarWOwzYGxhHycmbCoqmqXr6NthJl7mI-shMmXeqDau4StacS3o7GFonrfr9_MqoKJiWmEY2Ft&device_model=iPhone_6_Plus&subv=1.5.1&&cookie=MDAwMDAwMDAwMJCMpN-w09Wtg5-Bb36eh6CPqHualq2jmrCarWOwzYGxhHycmbCoqmqXr6NthJl7mI-shMmXeqDau4StacS3o7GFonrfr9_MqoKJiWmEY2Ft&cookie_id=9f782e140e01cca86ca1afd8420bbf6d","Accept":"*/*","Host":"kd.youth.cn","User-Agent":"Mozilla/5.0 (iPhone; CPU iPhone OS 14_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148","Accept-Language":"zh-cn","X-Requested-With":"XMLHttpRequest"},
+   'YOUTH_READBODY': 'p=9NwGV8Ov71o%3DgW5NEpb6rjb84bkaCQyOq-myT0C-Ktb_kF97hamPuz4ZZk3rmRrVU_m2Z51XN3szZYaCPxNG07BYjyjwYkBVGTfTGYPVecze9u-jGHCQmfvey4yZrPyKR-cA01PbV3h61GBiHFc-skGrpoDK0eliCfJPX7f9_IVT-MEKcW_xpZB4rdT3Mg7oLPAB2DPIfYH0EEthEVRjhH8ZiTFcpnbW5sfCrMioysiGOaB5KfzQYRntUUAagTbxbTe3AUUplMbOHr9zgT7WnrZqijpv9Uj_yGFh7KUYO5XV3HViYyaCBCOalU-8LIMq-GCJHXxt02QR1zJY4_cWCpv3x6iaUxjQGyqA6jekib2YAkIv7tPz8uIoCC3zStCcyejlvRXQ7HmmgqsDtWrM2fmDR2QTKvXCH5OHPa30wF5OPnS73GZQnRYHU2MioCNgC0SllzUMzyKx7lsyJQhpPkbCNmJzZ_6CdEPg_p6XSWbuvpsAaElm9zB_8DO9lnWCtp0j1lwIqDAeo_1Kn-K9PFcD2ZOrX5XbWiUOoG7VHXbTF072wJIV0X911DWbughRevS2D8CF0sU_YTghNiTk4Mr3LGYzqoAifGV7g_vm1LDnnEZIJAijcsxHTUXljPiAnI0yQ9KWcs_0romMtZjf31C_W9fDQ3nlpPrFGZTL1LGYyyXukJF7PQhQzTTbEQKVBzCB4xZbv8hYhCibp4YLWfye3mvKTy7morqYi6In3xjtak76LSpmIC-RylLaereKW6MFrOkRco3GlctFtvEEAe2ygGGAMr9WqQ336qIiy14b0SuJ2Ptt22Hw7u4V4XqbKeK5lwT6er9UeW3elkdrSJRleCK-J0-RqQ%3D%3D',
+   'YOUTH_REDBODY': '',
+   'YOUTH_READTIMEBODY': 'p=9NwGV8Ov71o%3DgW5NEpb6rjb84bkaCQyOq-myT0C-Ktb_kF97hamPuz4ZZk3rmRrVU_m2Z51XN3szZYaCPxNG07BYjyjwYkBVGTfTGYPVecze9u-jGHCQmfvey4yZrPyKR-cA01PbV3h61GBiHFc-skGrpoDK0eliCfJPX7f9_IVT-MEKcW_xpZB4rdT3Mg7oLPAB2DPIfYH0EEthEVRjhH8ZiTFcpnbW5sfCrMioysiGOaB5KfzQYRntUUAagTbxbTe3AUUplMbOHr9zgT7WnrYHcD_wXMBSMdesE9U7OzuqQ6AQuCScg1BJ91ltHIoelUv93js9B_hvIDUEfgx1ynpu-8kIvq2-I4G6XsQnBpJn_VSmUnhJ_sRJEKoRCzr3ZLa-mhy9Xg8ysEBJRJllSaJk1tUHKAW0rxXjFCzcekjECFdxU-TB1Orzmj6J6PhFNmmQTG9bAsIx7yyrKN-Awf_6niC18TzVrCuC8JIAHzer94iUAB2nLUPqlsPA7ZE7CM21vp9GmCGcUucPnL7f6CTqKJYlSxJKwCna4XZqAtjMsqmAJTjt29xxKciKwSChVyd0R6Z7_7vHD_DsD6BTYYw4MYndk1VthsxYcM5MiLyHlaD8vrdwmjAbANazbu2bZfS6n0o9RE3yWNAbskUH7PZiRclw-976b5XdANRWjE9Z6qQ0n57ZzNCkIlXNT95zswSOSx28iac3camjl5oHzl2ruYl8Scu1BEyfhhmfT4P8W1ozy_NeaCoKq7bWKAz91k4eHohfGshfs3lsN1eTECNSR9-JGj7ciH8v03JRzImZ49uloE2IEDEzQLMd9GcefgP9ZOK_fpxYZLi_g2LfGwE%3D',
+   'YOUTH_WITHDRAWBODY': 'p=9NwGV8Ov71o%3DgW5NEpb6rjb84bkaCQyOq-myT0C-Ktb_kF97hamPuz4ZZk3rmRrVU_m2Z51XN3szZYaCPxNG07BYjyjwYkBVGTfTGYPVecze9u-jGHCQmfvey4yZrPyKR-cA01PbV3h61GBiHFc-skGrpoDK0eliCfJPX7f9_IVT-MEKcW_xpZB4rdT3Mg7oLPAB2DPIfYH0EEthEVRjhH8ZiTFcpnbW5sfCrMioysiGOaB5KfzQYRntUUAagTbxbTe3AUUplMbOHr9zgT7WnrYHcD_wXMBSMdesE9U7OzuqQ6AQuCScg1BfajAjuvzhslehzp87vlYpbveDv0MCJDaX_GIa-kfmXJYuNx82eUEtmi5bcnOy0TaCawp7CdAu-pjf752pq59nf_JofICslgqNoH4UJo-18LA9FjYF19WKZLA8MujDY8d8afpz3yVXKkSelCVCrmODEUm60NJf8cFpDzwwMPBYY5kY7mJdKiyC18UeS_PN8Xnj6v6Ym-cilTIiC7hpBEjd5pezqz9ceqniLe3NKv0fL6yVsBQdB_9UvhtynSxG3nO-s36PjQSi_aDk0YskdzR44YlfRTO_JCP18u3dW6WwbRD6ilUkw9Sm7Q9SzOOfBFgxJTkLg_ahY2zO1strpbwQ7f2sg6nxumtt_famMPv5AVVXaG1DkOobbbeOsv7mi4Loux1PNVKvuYAiVWCxWEiliXswBecLGRPyxelo-2_ykbr-vVIJt0R3oGEEfAOxcLlGxkgInLyhW_Eq91c72fZQYsfo4PerA90eRdI-u1f5PfeW0WUuQrvi9n9afj20eW-1ZDAKDIrg38hCheArB9n37rWMsRbCRvQ%3D',
+   'YOUTH_SHAREBODY': 'access=WIFI&app_version=1.8.2&article_id=36317131&channel=80000000&channel_code=80000000&cid=80000000&client_version=1.8.2&device_brand=iphone&device_id=50330269&device_model=iPhone&device_platform=iphone&device_type=iphone&from=0&is_hot=0&isnew=1&mobile_type=2&net_type=1&openudid=2d8f2c1420f53421e4221325bce4e5ab&os_version=14.1&phone_code=2d8f2c1420f53421e4221325bce4e5ab&phone_network=WIFI&platform=3&request_time=1613308720&resolution=750x1624&sign=8e4b1917944c06c588263767c240604d&sm_device_id=202101152102004426b62b151c979439e02a2ae1f6de490143f6d402d2625c&stype=WEIXIN&szlm_ddid=D2bTEGxCI9AhV0OsL5Ra5rrxdydGVRkzDRECXmh7wlq7AXd5&time=1613308721&uid=52310878&uuid=2d8f2c1420f53421e4221325bce4e5ab',
+   'YOUTH_STARTBODY':'access=WIFI&app_version=1.8.2&channel=80000000&channel_code=80000000&cid=80000000&client_version=1.8.2&device_brand=iphone&device_id=50330269&device_model=iPhone&device_platform=iphone&device_type=iphone&isnew=1&mobile_type=2&net_type=1&openudid=2d8f2c1420f53421e4221325bce4e5ab&os_version=14.1&phone_code=2d8f2c1420f53421e4221325bce4e5ab&phone_network=WIFI&platform=3&request_time=1613961887&resolution=750x1624&sm_device_id=202101152102004426b62b151c979439e02a2ae1f6de490143f6d402d2625c&szlm_ddid=D2bTEGxCI9AhV0OsL5Ra5rrxdydGVRkzDRECXmh7wlq7AXd5&time=1613961887&token=e1bb07a462a29b28eac39b051abcc589&uid=52310878&uuid=2d8f2c1420f53421e4221325bce4e5ab'
+}
+
+COOKIELIST = [cookies1,cookies2,cookies3,cookies4,cookies5,cookies6,]  # 多账号准备
+
+# ac读取环境变量
+if "YOUTH_HEADER1" in os.environ:
+  COOKIELIST = []
+  for i in range(5):
+    headerVar = f'YOUTH_HEADER{str(i+1)}'
+    readBodyVar = f'YOUTH_READBODY{str(i+1)}'
+    readTimeBodyVar = f'YOUTH_READTIMEBODY{str(i+1)}'
+    withdrawBodyVar = f'YOUTH_WITHDRAWBODY{str(i+1)}'
+    shareBodyVar = f'YOUTH_SHAREBODY{str(i+1)}'
+    startBodyVar = f'YOUTH_STARTBODY{str(i+1)}'
+    if headerVar in os.environ and os.environ[headerVar] and readBodyVar in os.environ and os.environ[readBodyVar] and readTimeBodyVar in os.environ and os.environ[readTimeBodyVar]:
+      globals()['cookies'+str(i + 1)]["YOUTH_HEADER"] = json.loads(os.environ[headerVar])
+      globals()['cookies'+str(i + 1)]["YOUTH_READBODY"] = os.environ[readBodyVar]
+      globals()['cookies' + str(i + 1)]["YOUTH_READTIMEBODY"] = os.environ[readTimeBodyVar]
+      globals()['cookies' + str(i + 1)]["YOUTH_WITHDRAWBODY"] = os.environ[withdrawBodyVar]
+      globals()['cookies' + str(i + 1)]["YOUTH_SHAREBODY"] = os.environ[shareBodyVar]
+      globals()['cookies' + str(i + 1)]["YOUTH_STARTBODY"] = os.environ[startBodyVar]
+      COOKIELIST.append(globals()['cookies'+str(i + 1)])
+  print(COOKIELIST)
+
+cur_path = os.path.abspath(os.path.dirname(__file__))
+root_path = os.path.split(cur_path)[0]
+sys.path.append(root_path)
+YOUTH_HOST = "https://kd.youth.cn/WebApi/"
+
+def get_standard_time():
+  """
+  获取utc时间和北京时间
+  :return:
+  """
+  # <class 'datetime.datetime'>
+  utc_datetime = datetime.utcnow().replace(tzinfo=timezone.utc)  # utc时间
+  beijing_datetime = utc_datetime.astimezone(timezone(timedelta(hours=8)))  # 北京时间
+  return beijing_datetime
+
+def pretty_dict(dict):
+    """
+    格式化输出 json 或者 dict 格式的变量
+    :param dict:
+    :return:
+    """
+    return print(json.dumps(dict, indent=4, ensure_ascii=False))
+
+def sign(headers):
+  """
+  签到
+  :param headers:
+  :return:
+  """
+  time.sleep(0.3)
+  url = 'https://kd.youth.cn/TaskCenter/sign'
+  try:
+    response = requests_session().post(url=url, headers=headers, timeout=30).json()
+    print('签到')
+    print(response)
+    if response['status'] == 1:
+      return response
+    else:
+      return
+  except:
+    print(traceback.format_exc())
+    return
+
+def signInfo(headers):
+  """
+  签到详情
+  :param headers:
+  :return:
+  """
+  time.sleep(0.3)
+  url = 'https://kd.youth.cn/TaskCenter/getSign'
+  try:
+    response = requests_session().post(url=url, headers=headers, timeout=30).json()
+    print('签到详情')
+    print(response)
+    if response['status'] == 1:
+      return response['data']
+    else:
+      return
+  except:
+    print(traceback.format_exc())
+    return
+
+def punchCard(headers):
+  """
+  打卡报名
+  :param headers:
+  :return:
+  """
+  time.sleep(0.3)
+  url = f'{YOUTH_HOST}PunchCard/signUp'
+  try:
+    response = requests_session().post(url=url, headers=headers, timeout=30).json()
+    print('打卡报名')
+    print(response)
+    if response['code'] == 1:
+      return response
+    else:
+      return
+  except:
+    print(traceback.format_exc())
+    return
+
+def doCard(headers):
+  """
+  早起打卡
+  :param headers:
+  :return:
+  """
+  time.sleep(0.3)
+  url = f'{YOUTH_HOST}PunchCard/doCard'
+  try:
+    response = requests_session().post(url=url, headers=headers, timeout=30).json()
+    print('早起打卡')
+    print(response)
+    if response['code'] == 1:
+      shareCard(headers=headers)
+      return response['data']
+    else:
+      return
+  except:
+    print(traceback.format_exc())
+    return
+
+def shareCard(headers):
+  """
+  打卡分享
+  :param headers:
+  :return:
+  """
+  time.sleep(0.3)
+  startUrl = f'{YOUTH_HOST}PunchCard/shareStart'
+  endUrl = f'{YOUTH_HOST}PunchCard/shareEnd'
+  try:
+    response = requests_session().post(url=startUrl, headers=headers, timeout=30).json()
+    print('打卡分享')
+    print(response)
+    if response['code'] == 1:
+      time.sleep(0.3)
+      responseEnd = requests_session().post(url=endUrl, headers=headers, timeout=30).json()
+      if responseEnd['code'] == 1:
+        return responseEnd
+    else:
+      return
+  except:
+    print(traceback.format_exc())
+    return
+
+def luckDraw(headers):
+  """
+  打卡分享
+  :param headers:
+  :return:
+  """
+  time.sleep(0.3)
+  url = f'{YOUTH_HOST}PunchCard/luckdraw'
+  try:
+    response = requests_session().post(url=url, headers=headers, timeout=30).json()
+    print('七日签到')
+    print(response)
+    if response['code'] == 1:
+      return response['data']
+    else:
+      return
+  except:
+    print(traceback.format_exc())
+    return
+
+def timePacket(headers):
+  """
+  计时红包
+  :param headers:
+  :return:
+  """
+  time.sleep(0.3)
+  url = f'{YOUTH_HOST}TimePacket/getReward'
+  try:
+    response = requests_session().post(url=url, data=f'{headers["Referer"].split("?")[1]}', headers=headers, timeout=30).json()
+    print('计时红包')
+    print(response)
+    return
+  except:
+    print(traceback.format_exc())
+    return
+
+def watchWelfareVideo(headers):
+  """
+  观看福利视频
+  :param headers:
+  :return:
+  """
+  time.sleep(0.3)
+  url = f'{YOUTH_HOST}NewTaskIos/recordNum?{headers["Referer"].split("?")[1]}'
+  try:
+    response = requests_session().get(url=url, headers=headers, timeout=30).json()
+    print('观看福利视频')
+    print(response)
+    return
+  except:
+    print(traceback.format_exc())
+    return
+
+def shareArticle(headers, body):
+  """
+  分享文章
+  :param headers:
+  :return:
+  """
+  url = 'https://ios.baertt.com/v2/article/share/put.json'
+  headers['Content-Type'] = 'application/x-www-form-urlencoded;charset=utf-8'
+  try:
+    response = requests_session().post(url=url, data=body, headers=headers, timeout=30).json()
+    print('分享文章')
+    print(response)
+    return
+  except:
+    print(traceback.format_exc())
+    return
+
+def threeShare(headers, action):
+  """
+  三餐分享
+  :param headers:
+  :return:
+  """
+  time.sleep(0.3)
+  url = f'{YOUTH_HOST}ShareNew/execExtractTask'
+  headers['Content-Type'] = 'application/x-www-form-urlencoded;charset=utf-8'
+  body = f'{headers["Referer"].split("?")[1]}&action={action}'
+  try:
+    response = requests_session().post(url=url, data=body, headers=headers, timeout=30).json()
+    print('三餐分享')
+    print(response)
+    return
+  except:
+    print(traceback.format_exc())
+    return
+
+def openBox(headers):
+  """
+  开启宝箱
+  :param headers:
+  :return:
+  """
+  time.sleep(0.3)
+  url = f'{YOUTH_HOST}invite/openHourRed'
+  try:
+    response = requests_session().post(url=url, headers=headers, timeout=30).json()
+    print('开启宝箱')
+    print(response)
+    if response['code'] == 1:
+      share_box_res = shareBox(headers=headers)
+      return response['data']
+    else:
+      return
+  except:
+    print(traceback.format_exc())
+    return
+
+def shareBox(headers):
+  """
+  宝箱分享
+  :param headers:
+  :return:
+  """
+  time.sleep(0.3)
+  url = f'{YOUTH_HOST}invite/shareEnd'
+  try:
+    response = requests_session().post(url=url, headers=headers, timeout=30).json()
+    print('宝箱分享')
+    print(response)
+    if response['code'] == 1:
+      return response['data']
+    else:
+      return
+  except:
+    print(traceback.format_exc())
+    return
+
+def friendList(headers):
+  """
+  好友列表
+  :param headers:
+  :return:
+  """
+  time.sleep(0.3)
+  url = f'{YOUTH_HOST}ShareSignNew/getFriendActiveList'
+  try:
+    response = requests_session().get(url=url, headers=headers, timeout=30).json()
+    print('好友列表')
+    print(response)
+    if response['error_code'] == '0':
+      if len(response['data']['active_list']) > 0:
+        for friend in response['data']['active_list']:
+          if friend['button'] == 1:
+            time.sleep(1)
+            friendSign(headers=headers, uid=friend['uid'])
+      return response['data']
+    else:
+      return
+  except:
+    print(traceback.format_exc())
+    return
+
+def friendSign(headers, uid):
+  """
+  好友签到
+  :param headers:
+  :return:
+  """
+  time.sleep(0.3)
+  url = f'{YOUTH_HOST}ShareSignNew/sendScoreV2?friend_uid={uid}'
+  try:
+    response = requests_session().get(url=url, headers=headers, timeout=30).json()
+    print('好友签到')
+    print(response)
+    if response['error_code'] == '0':
+      return response['data']
+    else:
+      return
+  except:
+    print(traceback.format_exc())
+    return
+
+def sendTwentyScore(headers, action):
+  """
+  每日任务
+  :param headers:
+  :return:
+  """
+  time.sleep(0.3)
+  url = f'{YOUTH_HOST}NewTaskIos/sendTwentyScore?{headers["Referer"].split("?")[1]}&action={action}'
+  try:
+    response = requests_session().get(url=url, headers=headers, timeout=30).json()
+    print(f'每日任务 {action}')
+    print(response)
+    if response['status'] == 1:
+      return response
+    else:
+      return
+  except:
+    print(traceback.format_exc())
+    return
+
+def watchAdVideo(headers):
+  """
+  看广告视频
+  :param headers:
+  :return:
+  """
+  time.sleep(0.3)
+  url = 'https://kd.youth.cn/taskCenter/getAdVideoReward'
+  headers['Content-Type'] = 'application/x-www-form-urlencoded;charset=utf-8'
+  try:
+    response = requests_session().post(url=url, data="type=taskCenter", headers=headers, timeout=30).json()
+    print('看广告视频')
+    print(response)
+    if response['status'] == 1:
+      return response
+    else:
+      return
+  except:
+    print(traceback.format_exc())
+    return
+
+def watchGameVideo(body):
+  """
+  激励视频
+  :param headers:
+  :return:
+  """
+  time.sleep(0.3)
+  url = 'https://ios.baertt.com/v5/Game/GameVideoReward.json'
+  headers = {'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8'}
+  try:
+    response = requests_session().post(url=url, headers=headers, data=body, timeout=30).json()
+    print('激励视频')
+    print(response)
+    if response['success'] == True:
+      return response['items']
+    else:
+      return
+  except:
+    print(traceback.format_exc())
+    return
+
+def visitReward(body):
+  """
+  回访奖励
+  :param headers:
+  :return:
+  """
+  time.sleep(0.3)
+  url = 'https://ios.baertt.com/v5/mission/msgRed.json'
+  headers = {
+    'User-Agent': 'KDApp/1.8.0 (iPhone; iOS 14.2; Scale/3.00)',
+    'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8'
+  }
+  try:
+    response = requests_session().post(url=url, data=body, headers=headers, timeout=30).json()
+    print('回访奖励')
+    print(response)
+    if response['success'] == True:
+      return response['items']
+    else:
+      return
+  except:
+    print(traceback.format_exc())
+    return
+
+def articleRed(body):
+  """
+  惊喜红包
+  :param headers:
+  :return:
+  """
+  time.sleep(0.3)
+  url = 'https://ios.baertt.com/v5/article/red_packet.json'
+  headers = {
+    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
+    'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8'
+  }
+  try:
+    response = requests_session().post(url=url, data=body, headers=headers, timeout=30).json()
+    print('惊喜红包')
+    print(response)
+    if response['success'] == True:
+      return response['items']
+    else:
+      return
+  except:
+    print(traceback.format_exc())
+    return
+
+def readTime(body):
+  """
+  阅读时长
+  :param headers:
+  :return:
+  """
+  time.sleep(0.3)
+  url = 'https://ios.baertt.com/v5/user/stay.json'
+  headers = {
+    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
+    'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8'
+  }
+  try:
+    response = requests_session().post(url=url, data=body, headers=headers, timeout=30).json()
+    print('阅读时长')
+    print(response)
+    if response['error_code'] == '0':
+      return response
+    else:
+      return
+  except:
+    print(traceback.format_exc())
+    return
+
+def rotary(headers, body):
+  """
+  转盘任务
+  :param headers:
+  :return:
+  """
+  time.sleep(0.3)
+  currentTime = time.time()
+  url = f'{YOUTH_HOST}RotaryTable/turnRotary?_={currentTime}'
+  try:
+    response = requests_session().post(url=url, data=body, headers=headers, timeout=30).json()
+    print('转盘任务')
+    print(response)
+    return response
+  except:
+    print(traceback.format_exc())
+    return
+
+def rotaryChestReward(headers, body):
+  """
+  转盘宝箱
+  :param headers:
+  :return:
+  """
+  time.sleep(0.3)
+  currentTime = time.time()
+  url = f'{YOUTH_HOST}RotaryTable/getData?_={currentTime}'
+  try:
+    response = requests_session().post(url=url, data=body, headers=headers, timeout=30).json()
+    print('转盘宝箱')
+    print(response)
+    if response['status'] == 1:
+      i = 0
+      while (i <= 3):
+        chest = response['data']['chestOpen'][i]
+        if response['data']['opened'] >= int(chest['times']) and chest['received'] != 1:
+          time.sleep(1)
+          runRotary(headers=headers, body=f'{body}&num={i+1}')
+        i += 1
+      return response['data']
+    else:
+      return
+  except:
+    print(traceback.format_exc())
+    return
+
+def runRotary(headers, body):
+  """
+  转盘宝箱
+  :param headers:
+  :return:
+  """
+  time.sleep(0.3)
+  currentTime = time.time()
+  url = f'{YOUTH_HOST}RotaryTable/chestReward?_={currentTime}'
+  try:
+    response = requests_session().post(url=url, data=body, headers=headers, timeout=30).json()
+    print('领取宝箱')
+    print(response)
+    if response['status'] == 1:
+      return response['data']
+    else:
+      return
+  except:
+    print(traceback.format_exc())
+    return
+
+def doubleRotary(headers, body):
+  """
+  转盘双倍
+  :param headers:
+  :return:
+  """
+  time.sleep(0.3)
+  currentTime = time.time()
+  url = f'{YOUTH_HOST}RotaryTable/toTurnDouble?_={currentTime}'
+  try:
+    response = requests_session().post(url=url, data=body, headers=headers, timeout=30).json()
+    print('转盘双倍')
+    print(response)
+    if response['status'] == 1:
+      return response['data']
+    else:
+      return
+  except:
+    print(traceback.format_exc())
+    return
+
+def incomeStat(headers):
+  """
+  收益统计
+  :param headers:
+  :return:
+  """
+  time.sleep(0.3)
+  url = f'https://kd.youth.cn/wap/user/balance?{headers["Referer"].split("?")[1]}'
+  try:
+    response = requests_session().get(url=url, headers=headers, timeout=50).json()
+    print('收益统计')
+    print(response)
+    if response['status'] == 0:
+      return response
+    else:
+      return
+  except:
+    print(traceback.format_exc())
+    return
+
+def withdraw(body):
+  """
+  自动提现
+  :param headers:
+  :return:
+  """
+  time.sleep(0.3)
+  url = 'https://ios.baertt.com/v5/wechat/withdraw2.json'
+  headers = {
+    'User-Agent': 'KDApp/1.8.0 (iPhone; iOS 14.2; Scale/3.00)',
+    'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8'
+  }
+  try:
+    response = requests_session().post(url=url, headers=headers, data=body, timeout=30).json()
+    print('自动提现')
+    print(response)
+    if response['success'] == True:
+      return response['items']
+    else:
+      return
+  except:
+    print(traceback.format_exc())
+    return
+
+def bereadRed(headers):
+  """
+  时段红包
+  :param headers:
+  :return:
+  """
+  time.sleep(0.3)
+  url = f'{YOUTH_HOST}Task/receiveBereadRed'
+  try:
+    response = requests_session().post(url=url, headers=headers, timeout=30).json()
+    print('时段红包')
+    print(response)
+    if response['code'] == 1:
+      return response['data']
+    else:
+      return
+  except:
+    print(traceback.format_exc())
+    return
+
+def startApp(headers, body):
+  """
+  启动App
+  :param headers:
+  :return:
+  """
+  time.sleep(0.3)
+  url = 'https://ios.baertt.com/v6/count/start.json'
+  headers = {
+    'User-Agent': 'KDApp/1.8.0 (iPhone; iOS 14.2; Scale/3.00)',
+    'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8'
+  }
+  try:
+    response = requests_session().post(url=url, headers=headers, data=body, timeout=30).json()
+    print('启动App')
+    print(response)
+    if response['success'] == True:
+      return response
+    else:
+      return
+  except:
+    print(traceback.format_exc())
+    return
+
+def run():
+  title = f'📚中青看点'
+  content = ''
+  result = ''
+  beijing_datetime = get_standard_time()
+  print(f'\n【中青看点】{beijing_datetime.strftime("%Y-%m-%d %H:%M:%S")}')
+  hour = beijing_datetime.hour
+  for i, account in enumerate(COOKIELIST):
+    headers = account.get('YOUTH_HEADER')
+    readBody = account.get('YOUTH_READBODY')
+    readTimeBody = account.get('YOUTH_READTIMEBODY')
+    withdrawBody = account.get('YOUTH_WITHDRAWBODY')
+    shareBody = account.get('YOUTH_SHAREBODY')
+    startBody = account.get('YOUTH_STARTBODY')
+    rotaryBody = f'{headers["Referer"].split("&")[15]}&{headers["Referer"].split("&")[8]}'
+
+    if startBody:
+      startApp(headers=headers, body=startBody)
+    sign_res = sign(headers=headers)
+    if sign_res and sign_res['status'] == 1:
+      content += f'【签到结果】：成功 🎉 明日+{sign_res["nextScore"]}青豆'
+    elif sign_res and sign_res['status'] == 2:
+      send(title=title, content=f'【账户{i+1}】Cookie已过期，请及时重新获取')
+      continue
+
+    sign_info = signInfo(headers=headers)
+    if sign_info:
+      content += f'\n【账号】：{sign_info["user"]["nickname"]}'
+      content += f'\n【签到】：+{sign_info["sign_score"]}青豆 已连签{sign_info["total_sign_days"]}天'
+      result += f'【账号】: {sign_info["user"]["nickname"]}'
+    friendList(headers=headers)
+    if hour > 12:
+      punch_card_res = punchCard(headers=headers)
+      if punch_card_res:
+        content += f'\n【打卡报名】：打卡报名{punch_card_res["msg"]} ✅'
+    if hour >= 5 and hour <= 8:
+      do_card_res = doCard(headers=headers)
+      if do_card_res:
+        content += f'\n【早起打卡】：{do_card_res["card_time"]} ✅'
+    luck_draw_res = luckDraw(headers=headers)
+    if luck_draw_res:
+      content += f'\n【七日签到】：+{luck_draw_res["score"]}青豆'
+    visit_reward_res = visitReward(body=readBody)
+    if visit_reward_res:
+      content += f'\n【回访奖励】：+{visit_reward_res["score"]}青豆'
+    if shareBody:
+      shareArticle(headers=headers, body=shareBody)
+      for action in ['beread_extra_reward_one', 'beread_extra_reward_two', 'beread_extra_reward_three']:
+        time.sleep(5)
+        threeShare(headers=headers, action=action)
+    open_box_res = openBox(headers=headers)
+    if open_box_res:
+      content += f'\n【开启宝箱】：+{open_box_res["score"]}青豆 下次奖励{open_box_res["time"] / 60}分钟'
+    watch_ad_video_res = watchAdVideo(headers=headers)
+    if watch_ad_video_res:
+      content += f'\n【观看视频】：+{watch_ad_video_res["score"]}个青豆'
+    watch_game_video_res = watchGameVideo(body=readBody)
+    if watch_game_video_res:
+      content += f'\n【激励视频】：{watch_game_video_res["score"]}个青豆'
+    read_time_res = readTime(body=readTimeBody)
+    if read_time_res:
+      content += f'\n【阅读时长】：共计{int(read_time_res["time"]) // 60}分钟'
+    if (hour >= 6 and hour <= 8) or (hour >= 11 and hour <= 13) or (hour >= 19 and hour <= 21):
+      beread_red_res = bereadRed(headers=headers)
+      if beread_red_res:
+        content += f'\n【时段红包】：+{beread_red_res["score"]}个青豆'
+    for i in range(0, 5):
+      time.sleep(5)
+      rotary_res = rotary(headers=headers, body=rotaryBody)
+      if rotary_res:
+        if rotary_res['status'] == 0:
+          break
+        elif rotary_res['status'] == 1:
+          content += f'\n【转盘抽奖】：+{rotary_res["data"]["score"]}个青豆 剩余{rotary_res["data"]["remainTurn"]}次'
+          if rotary_res['data']['doubleNum'] != 0 and rotary_res['data']['score'] > 0:
+            double_rotary_res = doubleRotary(headers=headers, body=rotaryBody)
+            if double_rotary_res:
+              content += f'\n【转盘双倍】：+{double_rotary_res["score"]}青豆 剩余{double_rotary_res["doubleNum"]}次'
+
+    rotaryChestReward(headers=headers, body=rotaryBody)
+    for i in range(5):
+      watchWelfareVideo(headers=headers)
+    timePacket(headers=headers)
+    for action in ['watch_article_reward', 'watch_video_reward', 'read_time_two_minutes', 'read_time_sixty_minutes', 'new_fresh_five_video_reward', 'first_share_article']:
+      time.sleep(5)
+      sendTwentyScore(headers=headers, action=action)
+    stat_res = incomeStat(headers=headers)
+    if stat_res['status'] == 0:
+      for group in stat_res['history'][0]['group']:
+        content += f'\n【{group["name"]}】：+{group["money"]}青豆'
+      today_score = int(stat_res["user"]["today_score"])
+      score = int(stat_res["user"]["score"])
+      total_score = int(stat_res["user"]["total_score"])
+
+      if score >= 300000 and withdrawBody:
+        with_draw_res = withdraw(body=withdrawBody)
+        if with_draw_res:
+          result += f'\n【自动提现】：发起提现30元成功'
+          content += f'\n【自动提现】：发起提现30元成功'
+          send(title=title, content=f'【账号】: {sign_info["user"]["nickname"]} 发起提现30元成功')
+
+      result += f'\n【今日收益】：+{"{:4.2f}".format(today_score / 10000)}'
+      content += f'\n【今日收益】：+{"{:4.2f}".format(today_score / 10000)}'
+      result += f'\n【账户剩余】：{"{:4.2f}".format(score / 10000)}'
+      content += f'\n【账户剩余】：{"{:4.2f}".format(score / 10000)}'
+      result += f'\n【历史收益】：{"{:4.2f}".format(total_score / 10000)}\n\n'
+      content += f'\n【历史收益】：{"{:4.2f}".format(total_score / 10000)}\n'
+
+  print(content)
+
+  # 每天 23:00 发送消息推送
+  if beijing_datetime.hour == 21 and beijing_datetime.minute >= 0 and beijing_datetime.minute < 5:
+    send(title=title, content=result)
+  elif not beijing_datetime.hour == 21:
+    print('未进行消息推送，原因：没到对应的推送时间点\n')
+  else:
+    print('未在规定的时间范围内\n')
+
+if __name__ == '__main__':
+    run()
