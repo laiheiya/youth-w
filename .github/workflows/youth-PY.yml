@@ -1,4 +1,4 @@
-name: 中青
+name: 中青-py
 
 on:
   workflow_dispatch:
