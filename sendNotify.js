@@ -46,13 +46,13 @@ let DD_BOT_SECRET = '';
 // =======================================企业微信机器人通知设置区域===========================================
 //此处填你企业微信机器人的 webhook(详见文档 https://work.weixin.qq.com/api/doc/90000/90136/91770)，例如：693a91f6-7xxx-4bc4-97a0-0ec2sifa5aaa
 //注：此处设置github action用户填写到Settings-Secrets里面(Name输入QYWX_KEY)
-let QYWX_KEY = '';
+let QYWX_KEY = 'y5CQt6k1AygzdKVAguNFoT3XZf0Ar9Cv7WLtP65vixk';
 
 // =======================================企业微信应用消息通知设置区域===========================================
 //此处填你企业微信应用消息的 值(详见文档 https://work.weixin.qq.com/api/doc/90000/90135/90236)，依次填上corpid的值,corpsecret的值,touser的值,agentid的值，素材库图片id（见https://github.com/lxk0301/jd_scripts/issues/519) 注意用,号隔开，例如：wwcff56746d9adwers,B-791548lnzXBE6_BWfxdf3kSTMJr9vFEPKAbh6WERQ,mingcheng,1000001,2COXgjH2UIfERF2zxrtUOKgQ9XklUqMdGSWLBoW_lSDAdafat
 //增加一个选择推送消息类型，用图文消息直接填写素材库图片id的值，用卡片消息就填写0(就是数字零)
 //注：此处设置github action用户填写到Settings-Secrets里面(Name输入QYWX_AM)
-let QYWX_AM = '';
+let QYWX_AM = 'ww0339ca02f30149f9,y5CQt6k1AygzdKVAguNFoT3XZf0Ar9Cv7WLtP65vixk,@all,1000003,2Bn_LbSLWHANxo91AT3EwFh-bhW1KVSL1YRHuUX-x9HMsTtD-J3TJv5P535tOICd0';
 
 // =======================================iGot聚合推送通知设置区域===========================================
 //此处填您iGot的信息(推送key，例如：https://push.hellyw.com/XXXXXXXX)
